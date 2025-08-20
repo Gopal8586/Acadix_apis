@@ -12,11 +12,18 @@ app.use(cors());
 app.use(express.json());
 
 const DATA_PATH = path.join(__dirname, 'data', 'jobs.json');
+const PRODUCTS_PATH = path.join(__dirname, 'data', 'products.json');
 
 function readJobs() {
   const raw = fs.readFileSync(DATA_PATH, 'utf8');
   const jobs = JSON.parse(raw);
   return jobs;
+}
+
+function readProducts() {
+  const raw = fs.readFileSync(PRODUCTS_PATH, 'utf8');
+  const products = JSON.parse(raw);
+  return products;
 }
 
 app.get('/api/health', (req, res) => {
@@ -71,6 +78,51 @@ app.get('/api/jobs/:id', (req, res) => {
   const job = jobs.find(j => j.id === req.params.id);
   if (!job) return res.status(404).json({ error: 'Job not found' });
   res.json(job);
+});
+
+// Product Categories
+app.get('/api/product-categories', (req, res) => {
+  const products = readProducts();
+  const categories = Array.from(new Set(products.map(p => p.category))).sort();
+  res.json(categories);
+});
+
+// Products - list with optional filters and pagination
+app.get('/api/products', (req, res) => {
+  const products = readProducts();
+  const { category, q, limit, page } = req.query;
+
+  let filtered = products;
+  if (category) {
+    filtered = filtered.filter(p => p.category.toLowerCase() === String(category).toLowerCase());
+  }
+  if (q) {
+    const needle = String(q).toLowerCase();
+    filtered = filtered.filter(p =>
+      p.name.toLowerCase().includes(needle) ||
+      p.description.toLowerCase().includes(needle)
+    );
+  }
+
+  const pageNum = Math.max(1, parseInt(page || '1', 10));
+  const pageSize = Math.max(1, Math.min(100, parseInt(limit || '50', 10)));
+  const start = (pageNum - 1) * pageSize;
+  const end = start + pageSize;
+
+  res.json({
+    total: filtered.length,
+    page: pageNum,
+    limit: pageSize,
+    results: filtered.slice(start, end),
+  });
+});
+
+// Product by ID
+app.get('/api/products/:id', (req, res) => {
+  const products = readProducts();
+  const product = products.find(p => p.id === req.params.id);
+  if (!product) return res.status(404).json({ error: 'Product not found' });
+  res.json(product);
 });
 
 function startServer(port, attempt = 0) {
